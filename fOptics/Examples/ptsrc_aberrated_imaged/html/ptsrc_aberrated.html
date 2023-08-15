@@ -1,0 +1,246 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   <!--
+This HTML was auto-generated from MATLAB code.
+To make changes, update the MATLAB code and republish this document.
+      --><title>ptsrc_aberrated</title><meta name="generator" content="MATLAB 9.13"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2023-04-13"><meta name="DC.source" content="ptsrc_aberrated.m"><style type="text/css">
+html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
+
+html { min-height:100%; margin-bottom:1px; }
+html body { height:100%; margin:0px; font-family:Arial, Helvetica, sans-serif; font-size:10px; color:#000; line-height:140%; background:#fff none; overflow-y:scroll; }
+html body td { vertical-align:top; text-align:left; }
+
+h1 { padding:0px; margin:0px 0px 25px; font-family:Arial, Helvetica, sans-serif; font-size:1.5em; color:#d55000; line-height:100%; font-weight:normal; }
+h2 { padding:0px; margin:0px 0px 8px; font-family:Arial, Helvetica, sans-serif; font-size:1.2em; color:#000; font-weight:bold; line-height:140%; border-bottom:1px solid #d6d4d4; display:block; }
+h3 { padding:0px; margin:0px 0px 5px; font-family:Arial, Helvetica, sans-serif; font-size:1.1em; color:#000; font-weight:bold; line-height:140%; }
+
+a { color:#005fce; text-decoration:none; }
+a:hover { color:#005fce; text-decoration:underline; }
+a:visited { color:#004aa0; text-decoration:none; }
+
+p { padding:0px; margin:0px 0px 20px; }
+img { padding:0px; margin:0px 0px 20px; border:none; }
+p img, pre img, tt img, li img, h1 img, h2 img { margin-bottom:0px; }
+
+ul { padding:0px; margin:0px 0px 20px 23px; list-style:square; }
+ul li { padding:0px; margin:0px 0px 7px 0px; }
+ul li ul { padding:5px 0px 0px; margin:0px 0px 7px 23px; }
+ul li ol li { list-style:decimal; }
+ol { padding:0px; margin:0px 0px 20px 0px; list-style:decimal; }
+ol li { padding:0px; margin:0px 0px 7px 23px; list-style-type:decimal; }
+ol li ol { padding:5px 0px 0px; margin:0px 0px 7px 0px; }
+ol li ol li { list-style-type:lower-alpha; }
+ol li ul { padding-top:7px; }
+ol li ul li { list-style:square; }
+
+.content { font-size:1.2em; line-height:140%; padding: 20px; }
+
+pre, code { font-size:12px; }
+tt { font-size: 1.2em; }
+pre { margin:0px 0px 20px; }
+pre.codeinput { padding:10px; border:1px solid #d3d3d3; background:#f7f7f7; }
+pre.codeoutput { padding:10px 11px; margin:0px 0px 20px; color:#4c4c4c; }
+pre.error { color:red; }
+
+@media print { pre.codeinput, pre.codeoutput { word-wrap:break-word; width:100%; } }
+
+span.keyword { color:#0000FF }
+span.comment { color:#228B22 }
+span.string { color:#A020F0 }
+span.untermstring { color:#B20000 }
+span.syscmd { color:#B28C00 }
+span.typesection { color:#A0522D }
+
+.footer { width:auto; padding:10px 0px; margin:25px 0px 0px; border-top:1px dotted #878787; font-size:0.8em; line-height:140%; font-style:italic; color:#878787; text-align:left; float:none; }
+.footer p { margin:0px; }
+.footer a { color:#878787; }
+.footer a:hover { color:#878787; text-decoration:underline; }
+.footer a:visited { color:#878787; }
+
+table th { padding:7px 5px; text-align:left; vertical-align:middle; border: 1px solid #d6d4d4; font-weight:bold; }
+table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px solid #d6d4d4; }
+
+
+
+
+
+  </style></head><body><div class="content"><h2>Contents</h2><div><ul><li><a href="#2">Setup target</a></li><li><a href="#3">Initialize field class at target</a></li><li><a href="#4">Check forward and back propagation</a></li><li><a href="#5">Go through optics</a></li><li><a href="#6">Visualize setup</a></li></ul></div><pre class="codeinput"><span class="comment">% Top level script for point source propagated through atmosphere and imaged</span>
+<span class="comment">% on screen</span>
+close <span class="string">all</span>; clear <span class="string">all</span>; clc
+
+<span class="comment">% Inputs</span>
+[ P ] = parameterSetup_ptsrc(10e-16,100);
+
+<span class="comment">% Generate turbulence/ phase screen</span>
+turb = phase_screens(P.air); <span class="comment">%Creates initial flat screens</span>
+air = turb;
+<span class="comment">%turb = turb.kolmogorov(P.Turb); %Generates turbulence. try turb.tilt, or turb.OAM</span>
+turb.showme
+</pre><img vspace="5" hspace="5" src="ptsrc_aberrated_01.png" alt=""> <h2 id="2">Setup target</h2><pre class="codeinput">target = target_class(P.Target); <span class="comment">% Define initial target</span>
+target = target.genTarget_gauss();
+<span class="comment">%target = target.genTarget_ptsrc();</span>
+<span class="comment">%target = target.genTarget_focus_spot(lens1,air); %note lens1 needs to be</span>
+<span class="comment">%defined first</span>
+target.showme
+</pre><img vspace="5" hspace="5" src="ptsrc_aberrated_02.png" alt=""> <h2 id="3">Initialize field class at target</h2><pre class="codeinput">U = Efield(target);
+<span class="comment">% Generate  lenses</span>
+lens1 = thinLens(P.lens1);
+lens1.showme(<span class="string">'Pupil lens'</span>);
+U2 = U.propagateTo(lens1,<span class="string">'fwd'</span>,turb, <span class="string">'angspec'</span>);
+U2.showme
+</pre><pre class="codeoutput">Propagating 100.000000 meters with Angular Spectrum Prop
+Checking Sampling critera
+deltaN (dx2) 0.000 mm needs to be &lt;= to 0.000 mm: true
+N 1024 needs to be &gt;= to 7378697629483821056: false
+1.500 mm &lt;= 0.000 mm &lt;= 2.500 mm: false 
+N 1024 needs to be &gt;= to 1475739525896764416: false
+deltaZi 20.000 needs to be &lt;= to 0.000: false
+
+Sampling Constraints Failed. Trying Optimization
+Resampling to new parameters
+Checking Sampling critera
+deltaN (dx2) 0.250 mm needs to be &lt;= to 0.250 mm: true
+N 4000 needs to be &gt;= to 799: true
+0.500 mm &lt;= 0.250 mm &lt;= 1.500 mm: false 
+N 4000 needs to be &gt;= to 160: true
+deltaZi 20.000 needs to be &lt;= to 250.010: true
+
+Check Sampling. Propagation may be incorrect
+</pre><img vspace="5" hspace="5" src="ptsrc_aberrated_03.png" alt=""> <img vspace="5" hspace="5" src="ptsrc_aberrated_04.png" alt=""> <h2 id="4">Check forward and back propagation</h2><pre class="codeinput">Uf = U.propagate_ang_spec(P.Z, <span class="string">'fwd'</span>, lens1.width,turb);
+Ur = Uf.propagate_ang_spec(P.Z,<span class="string">'rev'</span>, P.Target.D,turb);
+Ur.showme(<span class="string">'Reverse propagation'</span>)
+</pre><pre class="codeoutput">Checking Sampling critera
+deltaN (dx2) 0.000 mm needs to be &lt;= to 0.000 mm: true
+N 1024 needs to be &gt;= to 7378697629483821056: false
+1.500 mm &lt;= 0.000 mm &lt;= 2.500 mm: false 
+N 1024 needs to be &gt;= to 1475739525896764416: false
+deltaZi 20.000 needs to be &lt;= to 0.000: false
+
+Sampling Constraints Failed. Trying Optimization
+Resampling to new parameters
+Checking Sampling critera
+deltaN (dx2) 0.250 mm needs to be &lt;= to 0.250 mm: true
+N 4000 needs to be &gt;= to 799: true
+0.500 mm &lt;= 0.250 mm &lt;= 1.500 mm: false 
+N 4000 needs to be &gt;= to 160: true
+deltaZi 20.000 needs to be &lt;= to 250.010: true
+
+Check Sampling. Propagation may be incorrect
+Checking Sampling critera
+deltaN (dx2) 0.050 mm needs to be &lt;= to 0.250 mm: true
+N 4000 needs to be &gt;= to 6400: false
+0.000 mm &lt;= 0.050 mm &lt;= 1.000 mm: true 
+N 4000 needs to be &gt;= to 1600: true
+deltaZi 20.000 needs to be &lt;= to 10.000: false
+
+Sampling Constraints Failed. Trying Optimization
+Resampling to new parameters
+Checking Sampling critera
+</pre><img vspace="5" hspace="5" src="ptsrc_aberrated_05.png" alt=""> <h2 id="5">Go through optics</h2><p>Create lens2 and air to propagate through for multistep angular spectrum</p><pre class="codeinput">lens2 = thinLens(P.lens2); lens2.showme
+air = phase_screens(P.air);
+
+<span class="comment">% Propagate to lens2</span>
+U3 = U2.propagateTo(lens2,<span class="string">'fwd'</span>,air, <span class="string">'angspec'</span>);
+U3.showme(<span class="string">'Field after lens2'</span>)
+
+<span class="comment">% Here is step by step way of achieving the same result</span>
+U3B = U2.propagate_ang_spec(lens2.position-U2.position); U3B.showme(<span class="string">'Field before lens2'</span>) <span class="comment">%Propagate to lens2</span>
+U3B = U3B.resample(lens2);U3B.showme(<span class="string">'Resampled field'</span>) <span class="comment">% Resample field to match sampling of lens2</span>
+U3B = U3B.apply_optic(lens2); U3B.showme(<span class="string">'Field after lens2; Manual method'</span>) <span class="comment">% Apply the lens2</span>
+</pre><pre class="codeoutput">Propagating 10.000000 meters with Angular Spectrum Prop
+Checking Sampling critera
+deltaN (dx2) 0.143 mm needs to be &lt;= to -0.043 mm: false
+N 1024 needs to be &gt;= to 945: true
+0.186 mm &lt;= 0.143 mm &lt;= 0.386 mm: false 
+N 1024 needs to be &gt;= to 98: true
+deltaZi 2.000 needs to be &lt;= to 20.898: true
+
+Sampling Constraints Failed. Trying Optimization
+Resampling to new parameters
+Checking Sampling critera
+Warning: Calling STRUCT on an object prevents the object from hiding its
+implementation details and should thus be avoided. Use DISP or DISPLAY to see
+the visible public details of an object. See 'help struct' for more
+information. 
+Checking Sampling critera
+deltaN (dx2) 0.143 mm needs to be &lt;= to -0.043 mm: false
+N 1024 needs to be &gt;= to 945: true
+0.186 mm &lt;= 0.143 mm &lt;= 0.386 mm: false 
+N 1024 needs to be &gt;= to 245: true
+deltaZi 5.000 needs to be &lt;= to 20.898: true
+
+Sampling Constraints Failed. Trying Optimization
+Resampling to new parameters
+Checking Sampling critera
+</pre><img vspace="5" hspace="5" src="ptsrc_aberrated_06.png" alt=""> <img vspace="5" hspace="5" src="ptsrc_aberrated_07.png" alt=""> <img vspace="5" hspace="5" src="ptsrc_aberrated_08.png" alt=""> <img vspace="5" hspace="5" src="ptsrc_aberrated_09.png" alt=""> <img vspace="5" hspace="5" src="ptsrc_aberrated_10.png" alt=""> <h2 id="6">Visualize setup</h2><pre class="codeinput"><span class="comment">%Uses .data and .position properties of each object to put an image on 3D</span>
+<span class="comment">%space. Its not perfect. I can't see how to rotate and zoom in the</span>
+<span class="comment">%visualization. Remove 'target' input to zoom into imaging optics</span>
+visualize_optics(lens1, lens2); title(<span class="string">'3D visualization of optics. Propagation direction is up'</span>)
+visualize_optics(U, U2, U3) ; title(<span class="string">'3D visualization of intensity along propagation'</span>)
+</pre><img vspace="5" hspace="5" src="ptsrc_aberrated_11.png" alt=""> <img vspace="5" hspace="5" src="ptsrc_aberrated_12.png" alt=""> <p class="footer"><br><a href="https://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2022b</a><br></p></div><!--
+##### SOURCE BEGIN #####
+% Top level script for point source propagated through atmosphere and imaged
+% on screen
+close all; clear all; clc
+
+% Inputs
+[ P ] = parameterSetup_ptsrc(10e-16,100); 
+
+% Generate turbulence/ phase screen
+turb = phase_screens(P.air); %Creates initial flat screens
+air = turb; 
+%turb = turb.kolmogorov(P.Turb); %Generates turbulence. try turb.tilt, or turb.OAM
+turb.showme
+
+%% Setup target
+target = target_class(P.Target); % Define initial target
+target = target.genTarget_gauss(); 
+%target = target.genTarget_ptsrc(); 
+%target = target.genTarget_focus_spot(lens1,air); %note lens1 needs to be
+%defined first
+target.showme
+
+%% Initialize field class at target
+U = Efield(target);   
+% Generate  lenses
+lens1 = thinLens(P.lens1);
+lens1.showme('Pupil lens'); 
+U2 = U.propagateTo(lens1,'fwd',turb, 'angspec');
+U2.showme
+
+
+%% Check forward and back propagation
+
+Uf = U.propagate_ang_spec(P.Z, 'fwd', lens1.width,turb);
+Ur = Uf.propagate_ang_spec(P.Z,'rev', P.Target.D,turb);
+Ur.showme('Reverse propagation')
+
+
+
+%% Go through optics 
+% Create lens2 and air to propagate through for multistep angular spectrum
+lens2 = thinLens(P.lens2); lens2.showme
+air = phase_screens(P.air);
+
+% Propagate to lens2
+U3 = U2.propagateTo(lens2,'fwd',air, 'angspec');
+U3.showme('Field after lens2')
+
+% Here is step by step way of achieving the same result
+U3B = U2.propagate_ang_spec(lens2.position-U2.position); U3B.showme('Field before lens2') %Propagate to lens2
+U3B = U3B.resample(lens2);U3B.showme('Resampled field') % Resample field to match sampling of lens2
+U3B = U3B.apply_optic(lens2); U3B.showme('Field after lens2; Manual method') % Apply the lens2
+
+
+%% Visualize setup
+%Uses .data and .position properties of each object to put an image on 3D
+%space. Its not perfect. I can't see how to rotate and zoom in the
+%visualization. Remove 'target' input to zoom into imaging optics
+visualize_optics(lens1, lens2); title('3D visualization of optics. Propagation direction is up')
+visualize_optics(U, U2, U3) ; title('3D visualization of intensity along propagation') 
+
+##### SOURCE END #####
+--></body></html>
