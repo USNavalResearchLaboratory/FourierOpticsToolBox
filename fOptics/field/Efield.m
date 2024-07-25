@@ -49,10 +49,10 @@ classdef Efield
             end
 
 
-            obj = calc_power(obj);
+            %obj = calc_power(obj);
         end
 
-        function obj = propagateTo(obj, optic, direction, aberration, proptype)
+        function [obj,varargout] = propagateTo(obj, optic, direction, aberration, proptype, figflag)
             %PROPAGATETO Combines propagation of electric field,
             %resampling, and applying optic into one function.
             % obj = propagateTo(obj, optic, direction, aberration, proptype) or obj = obj.propagateTo(optic, ...)
@@ -70,20 +70,22 @@ classdef Efield
                 direction = 'fwd';
                 aberration = phase_screens(phaseScreenDefault(obj)); %Returns initialization (air)
                 proptype = 'angspec'; %propagation type
+                figflag = 0
             end
 
             dz = abs(optic.position-obj.position);
             if proptype == 'angspec'
                 fprintf('Propagating %f meters with Angular Spectrum Prop\n',dz)
-                obj = obj.propagate_ang_spec(dz, direction, optic.width, aberration, obj.optimizationFlag);
+                [obj, Uout_all] = obj.propagate_ang_spec(dz, direction, optic.width, aberration, obj.optimizationFlag, figflag);
             elseif proptype == 'fresnel'
                 obj = obj.propagate_fresnel(dz,optic.width,optic.focus);
             end
+            varargout{1} = Uout_all; 
             %obj.showme('Before apply optic')
             % Create optic at position with right dx
-            obj = obj.resample(optic);
+            obj = obj.resample2(optic);
             obj = obj.apply_optic(optic);
-            obj = calc_power(obj);
+            %obj = calc_power(obj);
         end
 
         function obj = propagate_fresnel(obj, z, width2, R)
@@ -138,7 +140,7 @@ classdef Efield
         end
 
 
-        function [obj,varargout] = propagate_ang_spec(obj,z,direction, width2,aberration, optimization_flag)
+        function [obj,varargout] = propagate_ang_spec(obj,z,direction, width2,aberration, optimization_flag, figflag)
             % propagate_ang_spec - Angular Spectrum Propagation method
             % Usage:
             %     obj = propagate_ang_spec(obj, z, direction, width2, aberration)
@@ -166,6 +168,7 @@ classdef Efield
                 width2 = obj.width;
                 aberration = phase_screens(struct(obj)); %Use 2 screens of air
                 optimization_flag = obj.optimizationFlag;
+                figflag = 0
             end
             if isempty(aberration)
                 %aberration = struct('data', ones([obj.N, obj.N,2]), 'num_screens', 2, 'Cn2', 0, 'N', obj.N);
@@ -185,7 +188,7 @@ classdef Efield
             % Run sampling check
             %dx2 = (obj.wvl * z - D2p * obj.dx) / (2*obj.width); % Set reciever sampling
             %dx2 = set_receiver_sampling(obj.wvl, z, D2p, obj.dx, obj.width, obj.N);
-            dx2 = obj.dx; 
+            dx2 = obj.dx;
             [samplingCheck] = angSpecPropSampling(obj.wvl, z, D2p, obj.dx, D1p, dx2, obj.N, R, z/n);
 
             if ~samplingCheck && optimization_flag
@@ -198,13 +201,12 @@ classdef Efield
                 aberration = aberration.resample(obj);
             end
             [samplingCheck] = angSpecPropSampling(obj.wvl, z, width2, obj.dx, obj.width, dx2, obj.N, R, z/n);
-            varargout{1} = obj; %Copy the upsampled input field for reuse
             % If sampling is successful, run propagation
             if samplingCheck ~= true
                 disp('Check Sampling. Propagation may be incorrect')
             end
-            [Xout, Yout, Uout] = fullProp2(obj, direction,z,[], aberration, dx2,1);
-
+            [Xout, Yout, Uout, Uout_all] = fullProp2(obj, direction,z,[], aberration, dx2,figflag);
+            varargout{1} = Uout_all; 
             % Update output field values
             obj.X = Xout;
             obj.Y = Yout;
@@ -219,7 +221,7 @@ classdef Efield
             elseif strcmp(direction, 'revMirror')
                 obj.position = obj.position - z;
             end
-            obj = calc_power(obj);
+            %obj = calc_power(obj);
         end
 
 
@@ -247,9 +249,9 @@ classdef Efield
             end
 
             % Check that the optic and field have the same wavelength
-%             if obj.wvl ~= optic.wvl
-%                 error('Field and optic do not have the same wavelength');
-%             end
+            %             if obj.wvl ~= optic.wvl
+            %                 error('Field and optic do not have the same wavelength');
+            %             end
 
             % Apply the optic
             obj.data = obj.data .* optic.data;
@@ -257,6 +259,7 @@ classdef Efield
 
 
         function obj = resample(obj,obj2)
+            disp('** DEPRECATED. USE resample2() **')
             %RESAMPLE Resample data in obj to match the size and resolution of obj2.
             %
             %   obj = RESAMPLE(obj, obj2) resamples the data in obj to have the same
@@ -295,23 +298,39 @@ classdef Efield
             % intensive and may use a lot of RAM
             roi_diff = obj2.roi - obj.roi; %Difference between region of interests
             gpuFlag = 0;
+
             if roi_diff > 1e-3 %if difference between roi is bigger than 1mm (obj2 bigger than obj)
-                % pad obj.N to obj2.N
                 npad = round((obj2.roi - obj.roi) / obj.dx);
                 pad_left = floor(npad / 2);
                 pad_right = ceil(npad / 2);
-                try
-                    obj.data = padarray(obj.data, [pad_left pad_left], 'pre');
-                    obj.data = padarray(obj.data, [pad_right pad_right], 'post');
-                    
-                catch ME
-                    %Catch error if GPU is out of memory. Move computation on
-                    %CPU
-                    gpuFlag = 1; 
-                    obj.data = gather(obj.data); 
-                    obj.data = padarray(obj.data, [pad_left pad_left], 'pre');
-                obj.data = padarray(obj.data, [pad_right pad_right], 'post');
+
+                % Warning and option to proceed if the padding size is too large
+                if (pad_left > 1e4) || (pad_right > 1e4)
+                    warning('Large padding sizes detected. This might consume a lot of memory.');
+                    response = input('Do you want to continue? (yes/no)', 's');
+                    if strcmpi(response, 'no')
+                        return;
+                    end
                 end
+
+                % Incremental padding if pad size is large
+                padIncrement = 500; % Adjust this based on what's optimal in your environment.
+                if pad_left > padIncrement
+                    for k = 1:padIncrement:pad_left
+                        obj.data = padarray(obj.data, [min(padIncrement, pad_left - k + 1) 0], 'pre');
+                    end
+                else
+                    obj.data = padarray(obj.data, [pad_left 0], 'pre');
+                end
+
+                if pad_right > padIncrement
+                    for k = 1:padIncrement:pad_right
+                        obj.data = padarray(obj.data, [min(padIncrement, pad_right - k + 1) 0], 'post');
+                    end
+                else
+                    obj.data = padarray(obj.data, [pad_right 0], 'post');
+                end
+
                 obj.roi = obj.dx * size(obj.data, 1);
             elseif roi_diff < -1e-3 %if difference between roi is bigger than 1mm (obj bigger than obj2)
                 % crop obj.N to obj2.N
@@ -346,83 +365,151 @@ classdef Efield
         end
 
         function obj = resample2(obj, obj2)
-            %RESAMPLE Resample data in obj to match the size and resolution of obj2.
-            %   ... (existing documentation) ...
+            % updated resample function to fix edge case where memory
+            % became large due to padarray 
+            gpuFlag = 0;
 
-            roi_diff = obj2.roi - obj.roi; %Difference between region of interests
-            if roi_diff > 1e-3 %if difference between roi is bigger than 1mm (obj2 bigger than obj)
-                % pad obj.N to obj2.N
-                data_tmp = obj.data;
-                newsize = zeros(round(obj2.roi / obj.dx));
-                %pad_left = floor(npad / 2);
-                %pad_right = ceil(npad / 2);
-                
-                % Pad obj.data directly
-                %obj.data = [zeros(pad_left, obj.N); obj.data; zeros(pad_right, obj.N)];
-
-                % Update obj.roi
-                obj.roi = obj.dx * size(obj.data, 1);
-
-            elseif roi_diff < -1e-3 %if difference between roi is bigger than 1mm (obj bigger than obj2)
-                % crop obj.N to obj2.N
-
-                ncrop = round((obj.roi - obj2.roi) / obj.dx);
-                crop_left = floor(ncrop / 2);
-                crop_right = ceil(ncrop / 2);
-                obj.data = obj.data(crop_left+1:end-crop_right, crop_left+1:end-crop_right);
-                obj.roi = obj.dx * size(obj.data, 1);
-            end
-
-            % update obj to have same N, X, Y, and roi as obj2
-            Ntmp= round(obj.roi / obj.dx);
-            % resample obj.data to match obj2.data
+            % Step 1: Adjust resolution
             if obj.dx ~= obj2.dx
-                [X1, Y1] = meshgrid((-Ntmp/2 : Ntmp/2-1)*obj.dx);
-                obj.data = interp2(X1, Y1, obj.data, obj2.X, obj2.Y, 'cubic'); %spline was found to be best looking. cubic works with gpu
-                obj.data(isnan(obj.data)) = 0; % Set NaNs to 0
+                % Create grids for source and target based on obj's roi
+                [X1, Y1] = meshgrid(linspace(-obj.roi/2, obj.roi/2, obj.N));
+                newN = round(obj.N * (obj.dx/obj2.dx));
+                [X2, Y2] = meshgrid(linspace(-obj.roi/2, obj.roi/2, newN));
+
+                % Resample data using interp2 to match resolution
+                obj.data = interp2(X1, Y1, obj.data, X2, Y2, 'cubic', 0); % use NaN for values outside the grid
                 obj.dx = obj2.dx;
             end
 
+            % Step 2: Handle ROI differences
+            roi_diff = obj2.roi - obj.roi;
+            diff_px = round(roi_diff / obj2.dx);  % Difference in pixels
+
+            if roi_diff > 0
+                % Padding
+                pad_left = floor(diff_px / 2);
+                pad_right = ceil(diff_px / 2);
+                obj.data = padarray(obj.data, [pad_left, pad_left], 'pre');
+                obj.data = padarray(obj.data, [pad_right, pad_right], 'post');
+            elseif roi_diff < 0
+                % Cropping
+                crop_left = floor(abs(diff_px) / 2);
+                crop_right = ceil(abs(diff_px) / 2);
+                obj.data = obj.data(crop_left+1:end-crop_right, crop_left+1:end-crop_right);
+            end
+
+            % Step 3: Ensure final array size matches obj2.N
+            if size(obj.data, 1) ~= obj2.N
+                final_diff = obj2.N - size(obj.data, 1);
+                pad_left = floor(final_diff / 2);
+                pad_right = ceil(final_diff / 2);
+                obj.data = padarray(obj.data, [pad_left, pad_left], 'pre');
+                obj.data = padarray(obj.data, [pad_right, pad_right], 'post');
+            end
+
+            % Update other properties
+            obj.roi = obj2.roi;
+            obj.N = obj2.N;
             obj.X = obj2.X;
             obj.Y = obj2.Y;
-            obj.width = obj2.width;
-            obj.N = size(obj.data,1);
+
+            if gpuFlag
+                obj.data = gpuArray(obj.data); % Put array back to GPU if it was taken off
+            end
+
 
         end
 
         function obj = unwrap_phase(obj)
-            wrapped_phase = angle(obj.data);
+            wrapped_phase = gather(angle(obj.data));
             obj.phase = Unwrap_TIE_DCT_Iter(wrapped_phase);
 
         end
-        function obj = magnify(obj,scale)
-            % Magnifies Efield by amount. It does it by doing imresize and then cropping
+        function obj = magnify(obj,scale,cropFlag)
+            % Magnifies Efield by amount. It does it by doing imresize and
+            % then cropping. But width and sample size is same. Field will
+            % be cropped if it becomes larger than aperture
+            arguments
+                obj
+                scale
+                cropFlag = 0
+            end
+            obj_temp = obj;
+            %cropFlag=0; % Keep 1 to match final array size to original
             try
-                data_temp = (imresize(obj.data,scale));
+                obj_temp.data = (imresize(obj.data,scale));
                 gpuFlag = 0;
             catch ME % when gpu is out of memory
-                obj.data = gather(obj.data); 
-                data_temp = (imresize(obj.data,scale));
-                gpuFlag = 1; 
+                obj.data = gather(obj.data);
+                obj_temp.data = (imresize(obj.data,scale));
+                gpuFlag = 1;
             end
-            if size(data_temp,1) > size(obj.data,1)
-                win = centerCropWindow2d(size(data_temp),size(obj.data));
-                data_temp = imcrop(real(data_temp),win) + 1i.*imcrop(imag(data_temp),win); %imcrop doesn't work on imaginary numbers some reason
+            if size(obj_temp.data,1) > size(obj.data,1)
+                if cropFlag
+                    win = centerCropWindow2d(size(obj_temp.data),size(obj.data));
+                    obj_temp.data = imcrop(real(obj_temp.data),win) + 1i.*imcrop(imag(obj_temp.data),win); %imcrop doesn't work on imaginary numbers some reason
+                    obj_temp.N = size(obj_temp.data,1);
+                    obj_temp.width = obj.width*scale;
+                    obj_temp.roi = obj_temp.N*obj_temp.dx;
+                    [obj_temp.X, obj_temp.Y] = meshgrid((-obj_temp.N/2 : obj_temp.N/2-1) * obj.dx);
+                else
+                    obj_temp.N = size(obj_temp.data,1);
+                    obj_temp.width = obj.width*scale;
+                    obj_temp.roi = obj_temp.N*obj_temp.dx;
+                    [obj_temp.X, obj_temp.Y] = meshgrid((-obj_temp.N/2 : obj_temp.N/2-1) * obj.dx);
+                    % obj_temp = obj_temp.resample(obj);
+                end
 
             else
-                npad = size(obj.data,1)-size(data_temp,1);
+                npad = size(obj.data,1)-size(obj_temp.data,1);
                 pad_left = floor(npad / 2);
                 pad_right = ceil(npad / 2);
-                data_temp = padarray(data_temp, [pad_left pad_left], 'pre');
-                data_temp = padarray(data_temp, [pad_right pad_right], 'post');
-            end
-            if gpuFlag
-                obj.data = gpuArray(data_temp); %Put array back to gpu if it was taken off
-            else
-                obj.data = data_temp;
-            end
+                obj_temp.data = padarray(obj_temp.data, [pad_left pad_left],min(abs(obj_temp.data(:))), 'pre');
+                obj_temp.data = padarray(obj_temp.data, [pad_right pad_right],min(abs(obj_temp.data(:))), 'post');
+                obj_temp.width = obj.width*scale;
+                obj_temp.roi = obj_temp.N*obj_temp.dx;
+                % Smooth padding
+%                 sigma = obj.roi;amplitude = max(abs(obj_temp.data(:)))*2;
+%                 gauss_mask = amplitude.*exp(- (obj_temp.X.^2+obj_temp.Y.^2) /(sigma^2));
+%                 [rows, cols] = size(obj_temp.data);
+%                 center_mask = ones(rows,cols);
+%                 overlap = 0;
+%                 center_mask(pad_left+overlap+1:rows-pad_right-overlap, pad_left+overlap+1:cols-pad_right-overlap) = 0;
+%                 outer_mask = gauss_mask.*center_mask; 
+%                 
+                %obj_temp.data = obj_temp.data + outer_mask.*obj_temp.data;
             
-            %obj.width = obj.width*scale;
+            end
+
+            obj = obj_temp;
+            if gpuFlag
+                obj_temp.data = gpuArray(obj_temp.data); %Put array back to gpu if it was taken off
+            else
+                obj_temp.data = obj_temp.data;
+            end
+
+
+        end
+        function obj = addSpeckle(obj,smoothing)
+            % Add speckle to the target. Smoothing is smoothing factor [integer]. 1
+            % means no smoothing. Higher = more smoothing
+            % This works by creating a smaller 2D array of random values,
+            % then upsamples it to the size of the desired array. Is it the
+            % best way? Need to research accurate ways to model speckle 
+            arguments
+                obj
+                smoothing = 10
+            end
+
+            speckleReal = (rand(round(obj.N/smoothing))-0.5)*2*pi;
+            if smoothing ~= 1
+                [ Xtmp, Ytmp ] = genGrids(obj.N/smoothing, obj.N/smoothing, obj.dx*smoothing, obj.dx*smoothing);
+                %[ Xq, Yq ] = genGrids(obj.N, obj.N, obj.dx, obj.dx);
+                % 
+                speckleReal = interp2(Xtmp,Ytmp,speckleReal,obj.X,obj.Y, 'cubic', 0);
+            end
+            obj.data = obj.data.*exp(1i*speckleReal); 
+
         end
 
         function obj = conjugate(obj)
@@ -443,25 +530,29 @@ classdef Efield
                 name = sprintf('Field at z = %f',obj.position);
             end
             % Create figure window with specified name.
-            figure("Position",[700,200,700,400], "Name",name);
-            limits = [-obj.width obj.width -obj.width obj.width].*1e3/2;
+            figure("Position",[700,200,700,400], "Name",name); 
+            if obj.roi/2 < obj.width
+                limits = [-obj.width obj.width -obj.width obj.width].*1e3/2;
+            else
+                limits = [-obj.width obj.width -obj.width obj.width].*1e3;
+            end
             % Plot intensity and phase in two subplots.
             % Add axis labels and zoom into field, defined by limits
             if strcmp(obj.domain, 'spatial')
-                subplot(1,2,1); imagesc(obj.X(1,:)*1e3, obj.Y(:,1)*1e3, abs(obj.data(:,:,1)).^2); title('Intensity');axis image
-                xlabel('[mm]'); ylabel('[mm]'); axis(limits)
+                subplot(1,2,1); imagesc(obj.X(1,:)*1e3, obj.Y(:,1)*1e3, abs(obj.data(:,:,1)).^2); title('Intensity');axis image; 
+                xlabel('[mm]'); ylabel('[mm]'); axis(limits); colorbar; %clim([0,1])
                 subplot(1,2,2); imagesc(obj.X(1,:)*1e3, obj.Y(:,1)*1e3, angle(obj.data(:,:,1))); title('Phase'); axis image
-                xlabel('[mm]'); ylabel('[mm]'); axis(limits)
-
+                xlabel('[mm]'); ylabel('[mm]'); axis(limits); colorbar
+                
                 if ~isempty(obj.phase) % plot unwrapped phase if it is there
-                    subplot(1,2,2); imagesc(obj.X(1,:)*1e3, obj.Y(:,1)*1e3, obj.phase); title('Phase'); axis image
+                    subplot(1,2,2); imagesc(obj.X(1,:)*1e3, obj.Y(:,1)*1e3, obj.phase); title('Phase'); axis image; colorbar
                 end
 
             elseif strcmp(obj.domain, 'frequency')
-                subplot(1,2,1); imagesc(obj.X(1,:), obj.Y(:,1), log10(abs(obj.data(:,:,1)))); title('Intensity');axis image
-                xlabel('[Hz]'); ylabel('[Hz]');
+                subplot(1,2,1); imagesc(obj.X(1,:), obj.Y(:,1), log10(abs(obj.data(:,:,1))+1e-10)); title('Intensity');axis image;
+                xlabel('[Hz]'); ylabel('[Hz]'); colorbar
                 subplot(1,2,2); imagesc(obj.X(1,:), obj.Y(:,1), angle(obj.data(:,:,1))); title('Phase'); axis image
-                xlabel('[Hz]'); ylabel('[Hz]');
+                xlabel('[Hz]'); ylabel('[Hz]'); colorbar
             end
 
             % Add x-axis label.
@@ -470,8 +561,38 @@ classdef Efield
             sgtitle(name)
 
             % Set font size of plot to 18 pixels.
-            fontsize(gcf,18, 'pixels')
-            pause(0.5) %Put puase to display image before continuing
+            fontsize(gcf,18, 'pixels'); fontname(gcf,'Times New Roman')
+            pause(0.05) %Put puase to display image before continuing
+        end
+
+        function showintensity(obj, name)
+            % Plots the intensity and phase of the field at the current position.
+
+            % Inputs:
+            % obj - Field object to be plotted.
+            % name - Title of the figure window (default: 'Field at z = obj.position').
+
+            % Outputs:
+            % None.
+            arguments
+                obj
+                name = sprintf('Field at z = %f',obj.position);
+            end
+            % Create figure window with specified name.
+            figure("Position",[700,200,700,400], "Name",name); 
+            limits = [-obj.width obj.width -obj.width obj.width].*1e3/2;
+            % Plot intensity and phase in two subplots.
+            % Add axis labels and zoom into field, defined by limits
+         
+            imagesc(obj.X(1,:)*1e3, obj.Y(:,1)*1e3, abs(obj.data(:,:,1)).^2);axis image; 
+            xlabel('[mm]'); ylabel('[mm]'); axis(limits); colorbar; clim([0,1])
+
+            % Add figure title.
+            sgtitle(name)
+
+            % Set font size of plot to 18 pixels.
+            fontsize(gcf,18, 'pixels'); fontname(gcf,"Times New Roman")
+            pause(0.05) %Put puase to display image before continuing
         end
 
 
@@ -507,12 +628,27 @@ classdef Efield
             obj.domain = 'spatial';
         end
 
-        function obj = calc_power(obj)
-            avg_I = mean(abs(obj.data(:)).^2);
-            obj.avg_power = avg_I*obj.roi;
+        function obj = calc_power(obj, width)
+            arguments
+                obj 
+                width = obj.width
+            end
+            width_px = floor(width./obj.dx);
+            center = floor(obj.N/2); 
+            cropped_area = obj.data(center-width_px:center+width_px,center-width_px:center+width_px);
+            avg_I = mean(abs(cropped_area(:)).^2);
+            obj.avg_power = avg_I*obj.width;
 
             peak_I = max(abs(obj.data(:)).^2);
-            obj.peak_power = peak_I*obj.roi;
+            obj.peak_power = peak_I;%*obj.roi;
+        end
+
+        function s = struct(self)
+            publicProperties = properties(self);
+            s = struct();
+            for fi = 1:numel(publicProperties)
+                s.(publicProperties{fi}) = self.(publicProperties{fi});
+            end
         end
     end
 

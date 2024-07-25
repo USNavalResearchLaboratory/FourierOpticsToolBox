@@ -44,15 +44,17 @@ classdef diffraction_grating
                 disp('Grating size [N] too small')
             end
             total_grooves = obj.grooves/mm * obj.roi; %total grooves in roi
-            N_per_groove = round(obj.N/total_grooves,TieBreaker="even");
+            N_per_groove = 2*floor(obj.N/total_grooves/2);
             %N_per_groove = round(obj.N/obj.grooves,TieBreaker="even"); % works if even
             
             %grating = [1 0 0 1]; %manual method. 
             %grating = ((-1).^(linspace(1,N_per_groove,N_per_groove))+1)/2; 
-            grating = [zeros([1,N_per_groove/2]), ones([1,N_per_groove/2])]; 
-            grating = repmat(grating, [1,obj.N/N_per_groove]); %grating should be symmetric [0 1 1 0]
+            grating = [zeros([1,ceil(N_per_groove/2)]), ones([1,ceil(N_per_groove/2)])]; 
+            grating = repmat(grating, [1,floor(obj.N/N_per_groove)]); %grating should be symmetric [0 1 1 0]
             grating = repmat(grating, [obj.N,1]); %alternate 1 0 to make grating
+            grating = grating(1:obj.N,1:obj.N); %Crop to same size as obj in case. assuming grating will end up bigger due to ceil
             obj.data = grating; 
+            
         end
 
         function obj = diffraction_grating_phase(obj, Uin)
@@ -97,7 +99,7 @@ classdef diffraction_grating
             Uin.data = imwarp(Uin.data,tform,'OutputView',outView);
             Uin.data(Uin.data == 0) = avg; %replace 0s in shifted image with average
 
-            
+            Uin.position = Uin.position + D;
             Uout = Uin; 
         end
 

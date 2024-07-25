@@ -34,7 +34,7 @@ if reasonSolverStopped == -2
     disp('Not resampling if Solver did not find good solution')
 else
     disp('Resampling to new parameters')
-    obj1 = obj1.resample(obj1_new);
+    obj1 = obj1.resample2(obj1_new);
     %Resample aberration 
     aberration = aberration.resample(obj1);
     dx2 = solution.deltaN; 

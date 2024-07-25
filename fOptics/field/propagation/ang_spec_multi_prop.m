@@ -1,11 +1,19 @@
-function [xn, yn, Uout] = ang_spec_multi_prop ...
-    (Uin, wvl, delta1, deltan, z, t)
+function [xn, yn, Uout, varargout] = ang_spec_multi_prop ...
+    (Uin, wvl, delta1, deltan, z, t, figflag)
 % function [xn yn Uout] = ang_spec_multi_prop ...
 %     (Uin, wvl, delta1, deltan, z, t)
 %TODO define inputs
 
 % t - turbulence [ size]? t = 1 means vacuum 
-
+    arguments
+        Uin
+        wvl
+        delta1
+        deltan
+        z
+        t
+        figflag = 0
+    end
     N = size(Uin, 1);   % number of grid points
     [nx, ny] = meshgrid((-N/2 : 1 : N/2 - 1));
     k = 2*pi/wvl;    % optical wavevector
@@ -27,6 +35,12 @@ function [xn, yn, Uout] = ang_spec_multi_prop ...
     r1sq = x1.^2 + y1.^2;
     Q1 = exp(1i*k/2*(1-m(1))/Delta_z(1)*r1sq);
     Uin = Uin .* Q1 .* t(:,:,1);
+    if figflag
+        Uout_all = zeros([size(Uin),n]);
+        Uout_all(:,:,1) = Uin; 
+    else
+        Uout_all = []; 
+    end
     for idx = 1 : n-1
 %         figure(); 
 %         subplot(1,3,1); imagesc(abs(Uin(:,:))); 
@@ -44,7 +58,9 @@ function [xn, yn, Uout] = ang_spec_multi_prop ...
         Uin = sg .* t(:,:,idx+1) ...
             .* ift2(Q2 ...
             .* ft2(Uin / m(idx), delta(idx)), deltaf);
-        
+        if figflag
+            Uout_all(:,:,idx+1) = Uin; 
+        end
     end
     % observation-plane coordinates
     xn = nx * delta(n);
@@ -52,3 +68,5 @@ function [xn, yn, Uout] = ang_spec_multi_prop ...
     rnsq = xn.^2 + yn.^2;
     Q3 = exp(1i*k/2*(m(n-1)-1)/(m(n-1)*Z)*rnsq);
     Uout = Q3 .* Uin;
+    varargout{1} = Uout_all; 
+end

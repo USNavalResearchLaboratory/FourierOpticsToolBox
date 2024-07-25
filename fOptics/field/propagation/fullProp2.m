@@ -1,4 +1,4 @@
-function [x2, y2, Uout] = fullProp2(efield, direction,Z,steps, turb, dx2,figflag)
+function [x2, y2, Uout, varargout] = fullProp2(efield, direction,Z,steps, turb, dx2,figflag)
 %FULLPROP2 uses multi-plane angular spectrum propagation
 %
 % The direction of propagation is given by the string direction. If the direction
@@ -72,8 +72,8 @@ end
 
 %% Propagate
 Z_array = linspace(0,Z,steps);
-[x2, y2, Uout] = ang_spec_multi_prop(input, efield.wvl, efield.dx, dx2, Z_array, phzScreens);
-
+[x2, y2, Uout, Uout_all] = ang_spec_multi_prop(input, efield.wvl, efield.dx, dx2, Z_array, phzScreens, figflag);
+varargout{1} = Uout_all; 
 
 % %% Old fullprop method. Delete when new method is solid
 % % Window function - - - - - - - - - - - - - - - - - - - - - - - - - - - - %

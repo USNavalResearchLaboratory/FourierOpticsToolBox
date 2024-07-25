@@ -79,7 +79,7 @@ classdef shackHartmannWavefrontSensor
 
             field = field.resample(obj); obj.incident_field = field; 
             field = field.apply_optic(obj);
-            field.showme('appliedlenslet')
+            %field.showme('appliedlenslet')
             field = field.propagate_ang_spec(obj.focus); 
             obj.spotfield = field; 
             
@@ -101,7 +101,7 @@ classdef shackHartmannWavefrontSensor
 
             field = field.resample(obj); obj.incident_field = field; 
             field = field.apply_optic(obj);
-            field.showme('appliedlenslet')
+            %field.showme('appliedlenslet')
             field = field.propagate_ang_spec(obj.focus); 
             obj.spotfield = field; 
      
@@ -126,8 +126,8 @@ classdef shackHartmannWavefrontSensor
             end
             obj.data = box_n; 
             %figure(); imagesc(spotfield_intensity); 
-            pos = [box_start(1)+obj.num_lenslets*box_width/2, box_start(2)+obj.num_lenslets*box_width/2, box_width,box_width]; 
-            hold on; drawrectangle("Position",pos);
+            %pos = [box_start(1)+obj.num_lenslets*box_width/2, box_start(2)+obj.num_lenslets*box_width/2, box_width,box_width]; 
+            %hold on; drawrectangle("Position",pos);
         end
         function obj = centroiding(obj)
             %METHOD1 Summary of this method goes here
@@ -164,7 +164,7 @@ classdef shackHartmannWavefrontSensor
                 gpuFlag = 0
             end
             %Phase reconstruction use slopes 
-          tic
+          
             if gpuFlag
                 obj.data = southwell_slopes_to_phase(gpuArray(obj.slopes), obj.num_lenslets, gpuFlag);
             else
@@ -174,7 +174,7 @@ classdef shackHartmannWavefrontSensor
             obj.data = obj.data.*aperture; %Set extra stuff to zero
             obj.data = imresize(obj.data,size(obj.X), 'cubic'); % Interpolate to original array size
             obj.data = exp(1i.*obj.data); %put phase into complex part of data
-            toc
+            
 
         end
         

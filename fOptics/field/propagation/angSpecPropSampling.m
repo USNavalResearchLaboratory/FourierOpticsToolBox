@@ -58,7 +58,7 @@ function samplingCheck = angSpecPropSampling(lambda, deltaZ, Dn, delta1, D1, del
 % Website: https://www.linkedin.com/in/dennisfgardner/
 % March 2018; Last revision: 22-March-2018
 
-disp('Checking Sampling criteria')
+%disp('Checking Sampling criteria')
 LogicalStr = {'false', 'true'};
 
 % Constraint #1 

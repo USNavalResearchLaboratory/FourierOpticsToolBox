@@ -4,29 +4,31 @@ classdef mirror_class
     % You can also reflect light (flipping object)
 
     properties
-        diameter
-        position
-        dx
-        N
-        X
-        Y
         angle_rad
-        data
+        wvl = 650e-9; %wavelength
+        N % Size of data array
+        dx %assuming dx=dy. use symmetric optics
+        X % X position meshgrid
+        Y % Y position meshgrid
+        width = 0; % width of object (not total width of array dx*N)
+        roi % Region of interest. Equals dx*N
+        position = 0; % Position of field along z axis
+        data = [];
     end
 
     methods
-        function obj = mirror_class(P,Pmirror) %lens struct
+        function obj = mirror_class(Pmirror) %lens struct
             %lens_class Construct an instance of this class
             %   Inputs: 
             % P - Parameters struct for general simulation parameters
             % Plens - Parameters struct for specific lens
-            obj.diameter = Pmirror.diameter;
+            obj.width = Pmirror.diameter;
             obj.position = Pmirror.position; 
             obj.dx = Pmirror.dx;
             obj.N = Pmirror.N;
             [obj.X,obj.Y] = meshgrid((-obj.N/2 : obj.N/2-1)*obj.dx); 
-
-             
+            obj.roi = obj.dx*obj.N;
+            obj.data = circ(round(obj.width./obj.dx)/2,[obj.N,obj.N]); 
         end
         function obj = tilt(obj,Pmirror)
             obj.angle_rad = Pmirror.angle_deg*pi/180; %deg in rad

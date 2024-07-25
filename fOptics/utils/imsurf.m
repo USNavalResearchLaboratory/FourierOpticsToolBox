@@ -143,12 +143,14 @@ x = x*scale + upperLeftPoint3(1);
 y = y*scale + upperLeftPoint3(2);
 z = z*scale + upperLeftPoint3(3);
 
-
+alpha_data = double(imageIn);
+alpha_threshold = 0.1;  % Adjust this value to control transparency threshold
+alpha_data(alpha_data < alpha_threshold) = 0;
 
 if doAlpha
 	h=surface('XData',x,'YData',y,'ZData',z,'CData',imageIn,'alphadata',alpha,'FaceAlpha', 'texturemap','FaceColor','texturemap','EdgeColor','none','alphadatamapping','none',varargin{:});
 else
-	h=surface('XData',x,'YData',y,'ZData',z,'CData',imageIn,'FaceColor','texturemap','EdgeColor','none',varargin{:});
+	h=surface('XData',x,'YData',y,'ZData',z,'CData',imageIn,'alphadata', alpha_data, 'FaceColor','texturemap','EdgeColor','none',varargin{:});
 end
 
 %Store input parameters in userdata

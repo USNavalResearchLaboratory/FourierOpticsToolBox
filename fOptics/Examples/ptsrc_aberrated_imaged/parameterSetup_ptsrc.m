@@ -45,17 +45,17 @@ P.Z = Z;
 
 %% Simulation grid points (N) 
 
-P.N = 2^11; %Starting simulation size. May change with optimization
+P.N = 2^10; %Starting simulation size. May change with optimization
 
 %% Target Parameters - - - - - - - - - - - - - - - - - - - - - - - - - - - %
 % three bars or USAF
 P.Target.targetType = 'ptSrc';
-P.Target.D = 1*P.U.mm; % diameter of target
+P.Target.width = 1*P.U.mm; % diameter of target
 P.Target.N = P.N; %Define target grid points. But maybe expanded to fit propagation constraints
 P.Target.wvl = P.wvl;
 P.Target.position = 0; %Define position of target as zero
 P.Target.distance = Z; 
-P.Target.dx = P.Target.D/10; %Gives N grid points in target diameter
+P.Target.dx = P.Target.width/10; %Gives N grid points in target diameter
 P.Target.specks = 1; % number of speckle realizations
 
 %% Turbulence parameters and statistics - - - - - - - - - - - - - - - - - -%
@@ -98,7 +98,7 @@ P.Turb.rytovDelta = 1.23*(2*pi/P.wvl)^(7/6)*P.Turb.Cn2.*P.Turb.deltaZ^(11/6)/4;
 
 % Pupil lens %
 P.lens1.focus = P.Z; %focal length of imaging lens
-P.lens1.diameter = 10*P.U.cm;  %diameter of imaging lens
+P.lens1.diameter = 0.5*P.U.m;  %diameter of imaging lens
 P.lens1.position = P.Z; %distance between imaging lens and bifocal
 P.lens1.dx = P.lens1.diameter/1000; 
 P.lens1.N = P.N; 

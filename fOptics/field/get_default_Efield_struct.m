@@ -3,8 +3,8 @@ function Efield_default = get_default_Efield_struct()
     target.wvl = 650e-9;
     target.N = 1024;
     
-    target.D = 0.002;
-    target.dx = target.D/10;
+    target.width = 0.002;
+    target.dx = target.width/10;
     target.roi = target.dx * target.N;
     target.position = 0;
     target.targetType = 'gauss'; 

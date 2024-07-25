@@ -58,6 +58,7 @@ classdef phase_screens
         roi %  The diameter of the aperture.
         wvl %  The wavelength of the light.
         Z % The propagation distance.
+        positions % positions of the screens
         zernike_distribution % Array of magnitudes for zernikes. Index of array = zernike number
         data % 3D Array. The turbulent screen data.
     end
@@ -73,9 +74,11 @@ classdef phase_screens
             end
             % Default screen is flat 'air' 
             if ~isfield(P, 'screens') 
-                P.screens = 2; %default 2 screens if not defined
+                obj.num_screens = 2; %default 2 screens if not defined
+            else
+                obj.num_screens = P.screens;
             end
-            obj.num_screens = P.screens;
+            
             obj.type = 'flat';
             obj.data = ones(P.N, P.N, obj.num_screens);
             obj.N = P.N;
@@ -104,7 +107,7 @@ classdef phase_screens
             obj.kolm_zerns = Turb.K;
             %obj.dx = Turb.dx; %TODO, this isnt exactly right. Need to know what dx field will be at location of field.
             obj.num_screens = Turb.screens; 
-     
+            obj.positions = linspace(0,Turb.screens*Turb.deltaZ,Turb.screens);
             disp('Generating Turbulence screens...')
             screens_tmp = ones(obj.N, obj.N, obj.num_screens);
 
@@ -116,6 +119,7 @@ classdef phase_screens
                 for scr = 1:obj.num_screens
                         screens_tmp(:, :, scr) = turbulence_phi_fftGPU(Ntmp, r0_pxtmp,kolm_zernstmp);
                         screens_tmp(:, :, scr) = exp(1i * (screens_tmp(:, :, scr) - mean(mean(screens_tmp(:, :, scr))))); % exponentiate for E-field multiplication
+                    
                 end
             else
                 for scr = 1:obj.num_screens
@@ -143,13 +147,13 @@ classdef phase_screens
             obj.r0_dZ = Turb.r0delta; 
             obj.r0_px = Turb.r0delta/obj.dx;
             obj.kolm_zerns = Turb.K;
-            obj.num_screens = 1; %Turb.screens; 
+            obj.num_screens = Turb.screens; 
 
             r0 = NAYRU.Turb.r0screenCalc(obj.Cn2,obj.wvl,z,'N',obj.num_screens);
-            phase_screens = zeros(obj.N,obj.N,obj.num_screens+1,flowspeed*frames); %all turbulent realizations
+            phase_screens = zeros(obj.N,obj.N,obj.num_screens,flowspeed*frames); %all turbulent realizations
 
             for i = 1:obj.num_screens
-                phase_screens(:,:,i+1,:) = NAYRU.Turb.InfKolmogorov(obj.N,'N',flowspeed*frames,'dx',obj.dx,'r0',r0);
+                phase_screens(:,:,i,:) = NAYRU.Turb.InfKolmogorov(obj.N,'N',flowspeed*frames,'dx',obj.dx,'r0',r0);
                             
             end
             obj.data = phase_screens; 
@@ -195,14 +199,14 @@ classdef phase_screens
                 oam = struct('Z', 1000)
             end
             index = 2; % index of the spiral phase pattern
-            scr = 2; % the index of the plane where the spiral phase pattern is applied
+            scr = 3; % the index of the plane where the spiral phase pattern is applied
             obj.Z = oam.Z; 
             % Generate the spiral phase pattern using the oam_phasescreen function and
             % apply it to the electric field
             obj.data(:, :, scr) = exp(1i .* angle(oam_phasescreen(obj, charge, index)));
         end
 
-        function obj = zernike(obj, indices, randomize)
+        function obj = zernike(obj, nOrder, indices, randomize, scaler )
             %ZERNIKE Add a Zernike aberration to the wavefront
             % obj = ZERNIKE(obj, index) adds the Zernike aberration corresponding to the
             % given index to the wavefront obj. The aberration is added to the central
@@ -217,14 +221,25 @@ classdef phase_screens
             % Outputs:
             % obj - The updated wavefront with the Zernike aberration added to the central screen
             % Compute Zernike polynomials up to fifth order
-            nOrder = 5;
+            arguments
+                obj
+                nOrder = 5
+                indices = -1
+                randomize = 0;
+                scaler = 1;
+                
+            end
             [~, zernikes, ~] = zernikePolynomials(obj.N, obj.N, nOrder);
 
             % Add the Zernike aberration to the central screen
-            scr = round(obj.num_screens / 2);
-            
+            %scr = round(obj.num_screens / 2);
+            scr = obj.num_screens ;
             scale = zeros([1 size(zernikes,3)]); 
-            scale(indices) = 3; 
+            if indices == -1
+                scale(:) = 1; 
+            else 
+                scale(indices) = scaler; 
+            end
             if randomize
                 rand_coeffs =  1 - 2*rand([1 size(zernikes,3)]); 
                 scale = scale.*rand_coeffs;
@@ -318,11 +333,23 @@ classdef phase_screens
 
         end
 
+        function showmovie(obj)
+            figure("Name", "Phase screen movie");
+
+            for t = 1:size(obj.data,4)
+                imagesc((obj.data(:, :,1, t))); axis off 
+                title('Moving turbulence screens')
+                fontsize(gcf, 18, 'pixels')
+                pause(0.01)
+            end
+
+        end
+
         function zernike_profile(obj)
              figure("Name", "Zernike Profile");
              bar(obj.zernike_distribution)
              axis([0 length(obj.zernike_distribution) -1 1])
-             sgtitle('Zernike Profile')
+             sgtitle('Zernike Profile'); set(gca,"FontSize",20)
              xlabel('Zernike mode'); ylabel('Amplitude')
         end
 

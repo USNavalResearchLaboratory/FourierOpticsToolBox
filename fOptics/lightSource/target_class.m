@@ -18,6 +18,7 @@ classdef target_class
         avg_power   % Average power 
         peak_power  % Peak power
         num_speckles% Number of speckles
+        global_speckle % eniter speckle realization for polychromatic speckle sim
         data        % Data generated for target
     end
     
@@ -34,7 +35,7 @@ classdef target_class
             %   obj - An instance of target_class
             obj.targetType = target.targetType;
             obj.N = target.N; 
-            obj.width = target.D; 
+            obj.width = target.width; 
             obj.dx = target.dx; %obj.width/obj.N; 
             [obj.X,obj.Y] = meshgrid((-obj.N/2 : obj.N/2-1)*obj.dx); 
             obj.distance = target.distance;
@@ -79,7 +80,7 @@ classdef target_class
             obj.data = simple_gauss*max_Efield; %Since customgauss is normalized to 1, scale to max_I
             obj = obj.calc_power; 
         end
-        function obj = genTarget_focus_spot(obj,lens, aberration, gpuFlag)
+        function obj = genTarget_focus_spot(obj,lens, aberration,power, gpuFlag)
             % genTarget_focus_spot Make an airy disk pattern at the target.
             % use lens object as the outgoing field (top hat beam with lens
             % phase focusing at the target). 
@@ -95,6 +96,7 @@ classdef target_class
                 obj
                 lens
                 aberration = []
+                power = 1;
                 gpuFlag = 0;
             end
             optimization = 0; 
@@ -102,10 +104,14 @@ classdef target_class
             output_field = lens; 
             U = Efield(output_field, gpuFlag); 
             % propagate to target to make point source 
-            obj = U.propagate_ang_spec(U.position-obj.position,'rev',obj.width,aberration, optimization);
+            obj = U.propagate_ang_spec(U.position-obj.position,'rev',lens.width,aberration, optimization);
             [peak, ~,widths] = findpeaks(abs(obj.data(floor(obj.N/2),:))); 
             [~,ind] = max(peak); 
             obj.width = gather(widths(ind))*obj.dx; 
+            % Scale power
+            %obj.data = obj.data./(max(abs(obj.data),[],'all')); 
+            %obj.data = obj.data.*power;
+            
             
         end
 
@@ -152,7 +158,7 @@ classdef target_class
                 smoothing = 10
             end
 
-            speckleReal = (rand(round(obj.N/smoothing))-0.5)*2*pi;
+            speckleReal = (randn(round(obj.N/smoothing))-0.5)*2*pi;
             if smoothing ~= 1
                 [ Xtmp, Ytmp ] = genGrids(obj.N/smoothing, obj.N/smoothing, obj.dx*smoothing, obj.dx*smoothing);
                 %[ Xq, Yq ] = genGrids(obj.N, obj.N, obj.dx, obj.dx);
@@ -161,6 +167,56 @@ classdef target_class
             end
             obj.data = obj.data.*exp(1i*speckleReal); 
 
+        end
+        function obj = addPolychromaticSpeckle(obj,smoothing, wvl, wvl_center, N_wvl,wvl_shift_factor)
+            % Add speckle to the target. Smoothing is smoothing factor [integer]. 1
+            % means no smoothing. Higher = more smoothing
+            % This works by creating a smaller 2D array of random values,
+            % then upsamples it to the size of the desired array. 
+            % For polychromatic speckle, we create one large array called
+            % global_speckle. Then for each wavelength iteration, we shift
+            % the speckle map by the wvl_shift_factor. 
+            arguments
+                obj
+                smoothing = 10
+                wvl = 1000e-9
+                wvl_center = 800e-9 
+                N_wvl = 5; 
+                wvl_shift_factor = 0 
+                
+            end
+            if isempty(obj.global_speckle)
+                %rng(0)
+                obj.global_speckle = (randn(round(obj.N)) - 0.5) * 2 * pi;
+                obj.global_speckle = imgaussfilt(obj.global_speckle, smoothing);
+            end
+
+            delta_wvl = (wvl_center - wvl) / wvl_center;
+            cropped_size = obj.N / N_wvl; % Divide global speckle matrix by the number of wavelengths
+
+            % Calculate the center indices for the portion of the global speckle matrix
+            center_row = round(obj.N / 2);
+            center_col = round(obj.N / 2);
+            row_start = center_row - floor(cropped_size / 2);
+            col_start = center_col - floor(cropped_size / 2);
+
+            % Pick a portion of the global speckle for each wavelength
+            
+            shift_x = round(obj.N * wvl_shift_factor * delta_wvl);
+            shift_y = 1;
+            speckle_tmp = obj.global_speckle(row_start - shift_x :row_start + cropped_size - shift_x - 1, col_start - shift_y :col_start + cropped_size - shift_y - 1);
+            %figure; imagesc(speckle_tmp)
+
+%             if smoothing ~= 1
+                [Xtmp, Ytmp] = genGrids(floor(obj.N/N_wvl), obj.N/N_wvl, obj.dx*N_wvl, obj.dx*N_wvl);
+                %[Xtmp_global, Ytmp_global] = genGrids(obj.N, obj.N, obj.dx, obj.dx);
+                speckleReal = interp2(Xtmp, Ytmp, speckle_tmp, obj.X, obj.Y, 'cubic', 0);
+%             else
+%                 speckleReal = speckle_tmp;
+%             end
+            %figure; imagesc(obj.X(1,:)*1e3, obj.Y(:,1)*1e3,speckleReal); title('speckle pattern'); axis image; xlabel('[mm]'); ylabel('[mm]'); 
+            
+            obj.data = obj.data .* exp(1i * speckleReal);
         end
         function obj = calc_power(obj)
             avg_I = mean(abs(obj.data(:)).^2); 
